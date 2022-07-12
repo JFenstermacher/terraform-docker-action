@@ -151,7 +151,11 @@ func (hsp *HCLSecretsParser) quickFileCheck(path string) bool {
 	// There's probably a faster method for finding if any string in ProviderSecrets exist in file
 	// I think I remember reading regexp is slow in golang?
 	group := fmt.Sprintf("(%s)", strings.Join(hsp.ProviderSecrets, "|"))
-	regexp.Match(group, bytes)
 
-	return true
+	found, err := regexp.Match(group, bytes)
+	if err != nil {
+		return true
+	}
+
+	return found
 }
