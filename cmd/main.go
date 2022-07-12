@@ -7,7 +7,9 @@ import (
 )
 
 func main() {
-	hclParser := parser.HCLSecretsParser{}
+	hclParser := parser.HCLSecretsParser{
+		ProviderSecrets: []string{"secret_one", "secret_two"},
+	}
 
 	errors, ok := hclParser.ParseDirectory(".")
 

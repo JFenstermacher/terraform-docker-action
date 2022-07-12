@@ -38,7 +38,6 @@ func (hsp *HCLSecretsParser) ParseDirectory(dir string) ([]error, bool) {
 
 		if !info.IsDir() {
 			if hsp.quickFileCheck(path) {
-				fmt.Println(path)
 				errs, _ := hsp.ParseFile(path)
 				errors = append(errors, errs...)
 			}
@@ -52,7 +51,7 @@ func (hsp *HCLSecretsParser) ParseDirectory(dir string) ([]error, bool) {
 		return errors, false
 	}
 
-	return errors, len(errors) > 0
+	return errors, len(errors) == 0
 }
 
 func (hsp *HCLSecretsParser) ParseFile(path string) ([]error, bool) {
@@ -72,43 +71,44 @@ func (hsp *HCLSecretsParser) ParseContent(path string, bytes []byte) ([]error, b
 		return diags.Errs(), false
 	}
 
-	if err := hsp.parseFile(file); err != nil {
-		return []error{err}, false
+	if errs := hsp.parseFile(file); len(errs) > 0 {
+		return errs, false
 	}
 
-	return []error{}, true
+	return nil, true
 }
 
-func (hsp *HCLSecretsParser) parseFile(f *hcl.File) error {
+func (hsp *HCLSecretsParser) parseFile(f *hcl.File) []error {
 	body, ok := f.Body.(*hclsyntax.Body)
 	if !ok {
-		return fmt.Errorf("Error while converting to hclsyntax.Body")
+		return []error{fmt.Errorf("Error while converting to hclsyntax.Body")}
 	}
 
-	if err := hsp.parseBody(body); err != nil {
-		return err
+	if errs := hsp.parseBody(body); len(errs) > 0 {
+		return errs
 	}
 
 	return nil
 }
 
-func (hsp *HCLSecretsParser) parseBody(body *hclsyntax.Body) error {
+func (hsp *HCLSecretsParser) parseBody(body *hclsyntax.Body) []error {
+	var errors []error
 	for _, block := range body.Blocks {
-		if err := hsp.parseBlock(block); err != nil {
-			return err
+		if errs := hsp.parseBlock(block); len(errs) > 0 {
+			return errs
 		}
 	}
 
 	for _, value := range body.Attributes {
-		if err := hsp.parseExpression(value.Expr); err != nil {
-			return err
+		if errs := hsp.parseExpression(value.Expr); len(errs) > 0 {
+			errors = append(errors, errs...)
 		}
 	}
 
-	return nil
+	return errors
 }
 
-func (hsp *HCLSecretsParser) parseBlock(block *hclsyntax.Block) error {
+func (hsp *HCLSecretsParser) parseBlock(block *hclsyntax.Block) []error {
 	if block.Type == "provider" {
 		return nil
 	}
@@ -116,7 +116,8 @@ func (hsp *HCLSecretsParser) parseBlock(block *hclsyntax.Block) error {
 	return hsp.parseBody(block.Body)
 }
 
-func (hsp *HCLSecretsParser) parseExpression(expr hclsyntax.Expression) error {
+func (hsp *HCLSecretsParser) parseExpression(expr hclsyntax.Expression) []error {
+	var errors []error
 	traversals := hclsyntax.Variables(expr)
 
 	for _, traversal := range traversals {
@@ -128,13 +129,13 @@ func (hsp *HCLSecretsParser) parseExpression(expr hclsyntax.Expression) error {
 
 			for _, secret := range hsp.ProviderSecrets {
 				if attr.Name == secret {
-					return fmt.Errorf("Provider secret value '%s', %s, found outside of provider configuration", secret, attr.SourceRange())
+					errors = append(errors, fmt.Errorf("Provider secret value '%s', %s, found outside of provider configuration", secret, attr.SourceRange()))
 				}
 			}
 		}
 	}
 
-	return nil
+	return errors
 }
 
 func (hsp *HCLSecretsParser) quickFileCheck(path string) bool {
